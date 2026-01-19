@@ -168,13 +168,13 @@ def main() -> None:
     ap.add_argument("--input_txt", nargs="*", default=[], help="Пути к .txt")
     ap.add_argument("--artifacts_dir", default="artifacts", help="Папка для артефактов")
 
-    ap.add_argument("--seed", type=int, default=42)
+    ap.add_argument("--seed", type=int, default=7)
     ap.add_argument("--train_frac", type=float, default=0.75)
     ap.add_argument("--min_tokens", type=int, default=6)
     ap.add_argument("--max_tokens", type=int, default=80)
 
-    ap.add_argument("--p_delete", type=float, default=0.15)
-    ap.add_argument("--p_substitute", type=float, default=0.15)
+    ap.add_argument("--p_delete", type=float, default=0.08)
+    ap.add_argument("--p_substitute", type=float, default=0.08)
     ap.add_argument("--max_events", type=int, default=2)
     ap.add_argument("--prefer_confusable", action="store_true")
 
@@ -313,16 +313,33 @@ def main() -> None:
     token_metrics: Dict[str, Dict] = {}
 
     # threshold chosen on train (to avoid peeking at test)
-    thr, best_f1_tr = best_f1_threshold(y_train.tolist(), proba_train.tolist()) if y_train.any() else (0.5, 0.0)
+    thr_lr, _ = best_f1_threshold(y_train.tolist(), proba_train.tolist()) if y_train.any() else (0.5, 0.0)
 
-    for field in ["ngram_surp", "ft_outlier", "lr_score"]:
+    y_true_ngram_tr, y_score_ngram_tr = collect_labels_scores_tokens(
+        train_cor, token_rows_train, score_field="ngram_surp"
+    )
+    thr_ngram, _ = (
+        best_f1_threshold(y_true_ngram_tr, y_score_ngram_tr) if any(y_true_ngram_tr) else (0.5, 0.0)
+    )
+
+    y_true_ft_tr, y_score_ft_tr = collect_labels_scores_tokens(train_cor, token_rows_train, score_field="ft_outlier")
+    thr_ft, _ = best_f1_threshold(y_true_ft_tr, y_score_ft_tr) if any(y_true_ft_tr) else (0.5, 0.0)
+
+    for field, threshold in {
+        "ngram_surp": thr_ngram,
+        "ft_outlier": thr_ft,
+        "lr_score": thr_lr,
+    }.items():
         y_true, y_score = collect_labels_scores_tokens(test_cor, token_rows_test, score_field=field)
-        token_metrics[field] = metrics_from_scores(y_true, y_score, threshold=thr if field == "lr_score" else 0.5)
+        token_metrics[field] = metrics_from_scores(y_true, y_score, threshold=threshold)
 
     # 9) evaluate: gaps
     gap_metrics: Dict[str, Dict] = {}
+    y_true_gap_tr, y_score_gap_tr = collect_labels_scores_gaps(train_cor, gap_rows_train, score_field="gap_score")
+    thr_gap, _ = best_f1_threshold(y_true_gap_tr, y_score_gap_tr) if any(y_true_gap_tr) else (0.5, 0.0)
+
     y_true_g, y_score_g = collect_labels_scores_gaps(test_cor, gap_rows_test, score_field="gap_score")
-    gap_metrics["gap_score"] = metrics_from_scores(y_true_g, y_score_g, threshold=0.5)
+    gap_metrics["gap_score"] = metrics_from_scores(y_true_g, y_score_g, threshold=thr_gap)
 
     # 10) correction quality (top-k)
     correction = _correction_topk_metrics(test_cor, fwd_lm=fwd, candidate_vocab=top_vocab, top_k=5)
@@ -372,16 +389,36 @@ def main() -> None:
         "token_metrics": token_metrics,
         "gap_metrics": gap_metrics,
         "classifier_weights": weights,
-        "threshold_lr": float(thr),
+        "thresholds": {
+            "ngram_surp": float(thr_ngram),
+            "ft_outlier": float(thr_ft),
+            "lr_score": float(thr_lr),
+            "gap_score": float(thr_gap),
+        },
         "correction": correction,
     }
     (artifacts / "metrics.json").write_text(json.dumps(metrics, ensure_ascii=False, indent=2), encoding="utf-8")
 
     print("\nSaved to:", artifacts.resolve())
     print("Token metrics:")
-    print(json.dumps(token_metrics, ensure_ascii=False, indent=2)[:2000], "...")
+    for field, threshold in {
+        "ngram_surp": thr_ngram,
+        "ft_outlier": thr_ft,
+        "lr_score": thr_lr,
+    }.items():
+        metrics = token_metrics[field]
+        print(
+            f"  {field}: thr={threshold:.4f} "
+            f"precision={metrics.get('precision', 0.0):.4f} "
+            f"recall={metrics.get('recall', 0.0):.4f} "
+            f"f1={metrics.get('f1', 0.0):.4f}"
+        )
     print("Gap metrics:")
-    print(json.dumps(gap_metrics, ensure_ascii=False, indent=2))
+    gap = gap_metrics["gap_score"]
+    print(
+        f"  gap_score: thr={thr_gap:.4f} precision={gap.get('precision', 0.0):.4f} "
+        f"recall={gap.get('recall', 0.0):.4f} f1={gap.get('f1', 0.0):.4f}"
+    )
 
 
 if __name__ == "__main__":
