@@ -173,8 +173,8 @@ def main() -> None:
     ap.add_argument("--min_tokens", type=int, default=6)
     ap.add_argument("--max_tokens", type=int, default=80)
 
-    ap.add_argument("--p_delete", type=float, default=0.08)
-    ap.add_argument("--p_substitute", type=float, default=0.08)
+    ap.add_argument("--p_delete", type=float, default=0.04)
+    ap.add_argument("--p_substitute", type=float, default=0.12)
     ap.add_argument("--max_events", type=int, default=2)
     ap.add_argument("--prefer_confusable", action="store_true")
 

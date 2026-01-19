@@ -34,6 +34,29 @@ python run_experiment.py --input_docx "data/Гим Воскр 110_Copy.docx" "da
 python run_experiment.py --input_txt data/my_corpus.txt --artifacts_dir artifacts --seed 42
 ```
 
+## Modern sanity-check (современный корпус)
+
+Для sanity-check на большом современном русском тексте используйте отдельный скрипт
+`run_experiment_modern.py`. Он запускает тот же пайплайн, но сохраняет артефакты
+в отдельную папку (`artifacts_modern/`) и помечает `metrics.json` полем
+`corpus_type: "modern_russian"`, чтобы результаты не смешивались с основным
+экспериментом.
+
+1. Скачайте большой современный русский текст в `.txt` (например, Л. Н. Толстой:
+   «Война и мир», «Анна Каренина», «Воскресение») и сохраните в
+   `data/modern_russian.txt`.
+2. Запустите эксперимент:
+
+```bash
+python run_experiment_modern.py
+```
+
+Или укажите свой файл и папку артефактов:
+
+```bash
+python run_experiment_modern.py --input_txt data/my_corpus.txt --artifacts_dir artifacts_modern --seed 42
+```
+
 ## Входные данные и предобработка
 
 Поддерживаются форматы:
